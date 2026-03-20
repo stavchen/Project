@@ -114,6 +114,26 @@ export function useCreators(filters: SearchFilters) {
   return { ...query, creators };
 }
 
+/** Optimistically patch the favorite field for a creator across all infinite query pages */
+function optimisticSetFavorite(
+  qc: ReturnType<typeof useQueryClient>,
+  creatorId: string,
+  favorite: any
+) {
+  qc.setQueriesData({ queryKey: ["creators"] }, (old: any) => {
+    if (!old?.pages) return old;
+    return {
+      ...old,
+      pages: old.pages.map((page: any) => ({
+        ...page,
+        data: (page.data || []).map((c: any) =>
+          c.id === creatorId ? { ...c, favorite } : c
+        ),
+      })),
+    };
+  });
+}
+
 export function useFavorite() {
   const qc = useQueryClient();
 
@@ -132,10 +152,21 @@ export function useFavorite() {
       });
       return res.json();
     },
+    onMutate: async ({ creatorId, status = "discovered" }) => {
+      await qc.cancelQueries({ queryKey: ["creators"] });
+      optimisticSetFavorite(qc, creatorId, {
+        creatorId,
+        status,
+        addedAt: new Date().toISOString(),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["creators"] });
       qc.invalidateQueries({ queryKey: ["favorites"] });
       qc.invalidateQueries({ queryKey: ["analytics"] });
+    },
+    onError: (_err, { creatorId }) => {
+      optimisticSetFavorite(qc, creatorId, null);
     },
   });
 
@@ -171,6 +202,10 @@ export function useFavorite() {
         body: JSON.stringify({ creatorId }),
       });
       return res.json();
+    },
+    onMutate: async (creatorId) => {
+      await qc.cancelQueries({ queryKey: ["creators"] });
+      optimisticSetFavorite(qc, creatorId, null);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["creators"] });

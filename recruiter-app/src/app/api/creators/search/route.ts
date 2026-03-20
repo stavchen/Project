@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { creators, favorites, creatorTags } from "@/lib/schema";
+import { creators, favorites, creatorTags, syncState } from "@/lib/schema";
 import { eq, desc, asc, and, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -90,10 +90,26 @@ export async function GET(req: NextRequest) {
     const enriched = await enrichCreators(results);
     const nextOffset = offset + limit;
 
+    // Check if sync is still running — if so, more creators are coming
+    let syncRunning = false;
+    try {
+      const [state] = await db
+        .select({ status: syncState.status })
+        .from(syncState)
+        .where(eq(syncState.id, "creators"))
+        .limit(1);
+      syncRunning =
+        !!state && (state.status === "running" || state.status === "paused");
+    } catch {
+      // sync_state table may not exist yet, that's fine
+    }
+
+    const hasMore = results.length === limit || syncRunning;
+
     return NextResponse.json({
       data: enriched,
-      nextPage: results.length === limit ? `offset:${nextOffset}` : null,
-      hasMore: results.length === limit,
+      nextPage: hasMore ? `offset:${nextOffset}` : null,
+      hasMore,
     });
   } catch (error: any) {
     console.error("Search error:", error);

@@ -5,7 +5,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 export interface SearchFilters {
   query: string;
@@ -79,6 +79,23 @@ export function useCreators(filters: SearchFilters) {
     staleTime: 60_000,
     retry: 1,
   });
+
+  // Auto-retry when a page returns 0 results but sync is still going
+  // (hasMore is true because sync is running, but no new results yet)
+  useEffect(() => {
+    const pages = query.data?.pages;
+    if (!pages || pages.length === 0) return;
+    const lastPage = pages[pages.length - 1];
+    if (
+      lastPage.hasMore &&
+      (lastPage.data || []).length === 0 &&
+      !query.isFetchingNextPage
+    ) {
+      // Wait a bit for sync to add more creators, then retry
+      const timer = setTimeout(() => query.fetchNextPage(), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [query.data, query.isFetchingNextPage, query.fetchNextPage]);
 
   // Deduplicate across pages
   const creators = useMemo(() => {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { neon } from "@neondatabase/serverless";
 import { db } from "@/lib/db";
 import { creators, syncState } from "@/lib/schema";
 import { searchCreators } from "@/lib/onlyfans-api";
@@ -12,9 +13,26 @@ const BATCH_SIZE = 50;
 // Fetch this many API pages per request to stay within serverless timeout
 const PAGES_PER_RUN = 20;
 
+/** Ensure sync_state table exists (auto-migration) */
+async function ensureSyncTable() {
+  const sql = neon(process.env.DATABASE_URL!);
+  await sql`
+    CREATE TABLE IF NOT EXISTS sync_state (
+      id TEXT PRIMARY KEY,
+      cursor TEXT,
+      total_synced INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'idle',
+      started_at TEXT,
+      updated_at TEXT,
+      error TEXT
+    )
+  `;
+}
+
 /** GET: return current sync status */
 export async function GET() {
   try {
+    await ensureSyncTable();
     const [state] = await db
       .select()
       .from(syncState)
@@ -39,6 +57,7 @@ export async function GET() {
 /** POST: start or resume sync. Fetches PAGES_PER_RUN pages then returns. */
 export async function POST(req: NextRequest) {
   try {
+    await ensureSyncTable();
     const body = await req.json().catch(() => ({}));
     const reset = body.reset === true;
 

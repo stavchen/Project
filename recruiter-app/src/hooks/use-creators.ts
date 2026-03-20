@@ -28,26 +28,40 @@ export const DEFAULT_FILTERS: SearchFilters = {
 };
 
 async function fetchCreators({
-  pageParam = 0,
+  pageParam = "",
   filters,
 }: {
-  pageParam?: number;
+  pageParam?: string;
   filters: SearchFilters;
 }) {
   const params = new URLSearchParams({
-    offset: String(pageParam),
     limit: "20",
     sort: filters.sort,
     source: filters.source,
   });
+
+  if (pageParam) {
+    // For API mode this is a cursor, for cache mode it's an offset
+    if (filters.source === "api") {
+      params.set("cursor", pageParam);
+    } else {
+      params.set("offset", pageParam);
+    }
+  }
+
   if (filters.query) params.set("query", filters.query);
   if (filters.hasInstagram) params.set("hasInstagram", "true");
   if (filters.isFree !== "all") params.set("isFree", filters.isFree);
-  if (filters.minSubscribers) params.set("minSubscribers", filters.minSubscribers);
-  if (filters.maxSubscribers) params.set("maxSubscribers", filters.maxSubscribers);
+  if (filters.minSubscribers)
+    params.set("minSubscribers", filters.minSubscribers);
+  if (filters.maxSubscribers)
+    params.set("maxSubscribers", filters.maxSubscribers);
 
   const res = await fetch(`/api/creators/search?${params}`);
-  if (!res.ok) throw new Error("Search failed");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Search failed");
+  }
   return res.json();
 }
 
@@ -57,10 +71,16 @@ export function useCreators(filters: SearchFilters) {
   const query = useInfiniteQuery({
     queryKey: ["creators", filters],
     queryFn: ({ pageParam }) => fetchCreators({ pageParam, filters }),
-    getNextPageParam: (lastPage: any) =>
-      lastPage.hasMore ? lastPage.nextOffset : undefined,
-    initialPageParam: 0,
+    getNextPageParam: (lastPage: any) => {
+      if (!lastPage.hasMore) return undefined;
+      if (filters.source === "api") {
+        return lastPage.nextCursor || undefined;
+      }
+      return String(lastPage.nextOffset);
+    },
+    initialPageParam: "",
     staleTime: 60_000,
+    retry: 1,
   });
 
   // Deduplicate across pages

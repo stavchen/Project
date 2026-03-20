@@ -27,6 +27,8 @@ export default function DiscoverPage() {
   const {
     creators,
     isLoading,
+    isError,
+    error,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -246,6 +248,13 @@ export default function DiscoverPage() {
           >
             Cancel
           </Button>
+        </div>
+      )}
+
+      {/* Error display */}
+      {isError && (
+        <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm">
+          <strong>Error:</strong> {(error as any)?.message || "Failed to load creators"}
         </div>
       )}
 

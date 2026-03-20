@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { creators, favorites, creatorTags } from "@/lib/schema";
 import { searchCreators } from "@/lib/onlyfans-api";
-import { eq, desc, asc, and, sql, ilike } from "drizzle-orm";
+import { eq, desc, asc, and, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   try {
     const params = req.nextUrl.searchParams;
     const query = params.get("query") || "";
+    const cursor = params.get("cursor") || undefined;
     const offset = parseInt(params.get("offset") || "0");
     const limit = parseInt(params.get("limit") || "20");
     const sort = params.get("sort") || "newest";
@@ -21,59 +22,70 @@ export async function GET(req: NextRequest) {
 
     if (source === "api") {
       const result = await searchCreators({
-        query,
-        offset,
+        query: query || undefined,
+        cursor,
         limit,
         sort:
           sort === "newest"
-            ? "joinDate"
+            ? "join_date"
             : sort === "subscribers"
-              ? "subscribersCount"
+              ? "favorited_count"
               : undefined,
       });
 
-      // Upsert results into local DB
+      // Cache results in local DB (upsert)
       for (const profile of result.profiles) {
-        const [existing] = await db
-          .select({ id: creators.id })
-          .from(creators)
-          .where(eq(creators.id, profile.id))
-          .limit(1);
+        try {
+          const [existing] = await db
+            .select({ id: creators.id })
+            .from(creators)
+            .where(eq(creators.id, profile.id))
+            .limit(1);
 
-        if (existing) {
-          await db
-            .update(creators)
-            .set({ ...profile, fetchedAt: new Date().toISOString() })
-            .where(eq(creators.id, profile.id));
-        } else {
-          await db.insert(creators).values(profile);
+          if (existing) {
+            await db
+              .update(creators)
+              .set({ ...profile, fetchedAt: new Date().toISOString() })
+              .where(eq(creators.id, profile.id));
+          } else {
+            await db.insert(creators).values(profile);
+          }
+        } catch (dbErr) {
+          // Don't fail the whole request if one upsert fails
+          console.error("DB upsert error:", dbErr);
         }
       }
 
       // Enrich with favorite status and tags
       const enriched = await Promise.all(
         result.profiles.map(async (p) => {
-          const [fav] = await db
-            .select()
-            .from(favorites)
-            .where(eq(favorites.creatorId, p.id))
-            .limit(1);
-          const ctags = await db
-            .select()
-            .from(creatorTags)
-            .where(eq(creatorTags.creatorId, p.id));
-          return {
-            ...p,
-            favorite: fav || null,
-            tagIds: ctags.map((t) => t.tagId),
-          };
+          try {
+            const [fav] = await db
+              .select()
+              .from(favorites)
+              .where(eq(favorites.creatorId, p.id))
+              .limit(1);
+            const ctags = await db
+              .select()
+              .from(creatorTags)
+              .where(eq(creatorTags.creatorId, p.id));
+            return {
+              ...p,
+              favorite: fav || null,
+              tagIds: ctags.map((t) => t.tagId),
+            };
+          } catch {
+            return { ...p, favorite: null, tagIds: [] };
+          }
         })
       );
 
       return NextResponse.json({
         data: enriched,
-        nextOffset: offset + limit,
-        hasMore: result.profiles.length === limit,
+        nextCursor: result.nextCursor,
+        hasMore: !!result.nextCursor,
+        totalResults: result.totalResults,
+        credits: result.credits,
       });
     }
 
@@ -122,20 +134,24 @@ export async function GET(req: NextRequest) {
 
     const enriched = await Promise.all(
       results.map(async (p) => {
-        const [fav] = await db
-          .select()
-          .from(favorites)
-          .where(eq(favorites.creatorId, p.id))
-          .limit(1);
-        const ctags = await db
-          .select()
-          .from(creatorTags)
-          .where(eq(creatorTags.creatorId, p.id));
-        return {
-          ...p,
-          favorite: fav || null,
-          tagIds: ctags.map((t) => t.tagId),
-        };
+        try {
+          const [fav] = await db
+            .select()
+            .from(favorites)
+            .where(eq(favorites.creatorId, p.id))
+            .limit(1);
+          const ctags = await db
+            .select()
+            .from(creatorTags)
+            .where(eq(creatorTags.creatorId, p.id));
+          return {
+            ...p,
+            favorite: fav || null,
+            tagIds: ctags.map((t) => t.tagId),
+          };
+        } catch {
+          return { ...p, favorite: null, tagIds: [] };
+        }
       })
     );
 

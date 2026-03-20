@@ -31,6 +31,12 @@ export const DEFAULT_FILTERS: SearchFilters = {
   hasProfilePic: true,
 };
 
+/** Instagram filter forces cache mode on the server, mirror that here */
+function effectiveSource(filters: SearchFilters) {
+  if (filters.hasInstagram) return "cache";
+  return filters.source;
+}
+
 async function fetchCreators({
   pageParam = "",
   filters,
@@ -38,15 +44,15 @@ async function fetchCreators({
   pageParam?: string;
   filters: SearchFilters;
 }) {
+  const source = effectiveSource(filters);
   const params = new URLSearchParams({
     limit: "20",
     sort: filters.sort,
-    source: filters.source,
+    source: filters.source, // send original; server will override if needed
   });
 
   if (pageParam) {
-    // For API mode this is a cursor, for cache mode it's an offset
-    if (filters.source === "api") {
+    if (source === "api") {
       params.set("cursor", pageParam);
     } else {
       params.set("offset", pageParam);
@@ -79,7 +85,7 @@ export function useCreators(filters: SearchFilters) {
     queryFn: ({ pageParam }) => fetchCreators({ pageParam, filters }),
     getNextPageParam: (lastPage: any) => {
       if (!lastPage.hasMore) return undefined;
-      if (filters.source === "api") {
+      if (effectiveSource(filters) === "api") {
         return lastPage.nextCursor || undefined;
       }
       return String(lastPage.nextOffset);

@@ -80,9 +80,20 @@ export const savedSearches = pgTable("saved_searches", {
   createdAt: text("created_at").notNull(),
 });
 
+export const syncState = pgTable("sync_state", {
+  id: text("id").primaryKey(), // e.g. "creators"
+  cursor: text("cursor"), // API cursor to resume from
+  totalSynced: integer("total_synced").default(0),
+  status: text("status").default("idle"), // idle | running | done | error
+  startedAt: text("started_at"),
+  updatedAt: text("updated_at"),
+  error: text("error"),
+});
+
 export type Creator = typeof creators.$inferSelect;
 export type Favorite = typeof favorites.$inferSelect;
 export type Tag = typeof tags.$inferSelect;
 export type CreatorTag = typeof creatorTags.$inferSelect;
 export type OutreachEntry = typeof outreachLog.$inferSelect;
 export type SavedSearch = typeof savedSearches.$inferSelect;
+export type SyncState = typeof syncState.$inferSelect;

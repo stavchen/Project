@@ -14,7 +14,8 @@ import {
   type SearchFilters,
 } from "@/hooks/use-creators";
 import { creatorsToCSV } from "@/lib/utils";
-import { Download, CheckSquare, Tag, X } from "lucide-react";
+import { Download, CheckSquare, Tag, X, RefreshCw, Loader2 } from "lucide-react";
+import { useSync } from "@/hooks/use-sync";
 
 export default function DiscoverPage() {
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
@@ -35,6 +36,7 @@ export default function DiscoverPage() {
   } = useCreators(filters);
   const { addFavorite, updateFavorite, removeFavorite } = useFavorite();
   const { tags, createTag, toggleTag } = useTags();
+  const { syncStatus, startSync, isSyncing } = useSync();
 
   // Saved searches
   const { data: savedSearchesData } = useQuery({
@@ -207,6 +209,23 @@ export default function DiscoverPage() {
               </Button>
             </div>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => startSync(syncStatus?.status === "done")}
+            disabled={isSyncing}
+          >
+            {isSyncing ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-1" />
+            )}
+            {isSyncing
+              ? `Syncing... ${syncStatus?.totalSynced || 0} creators`
+              : syncStatus?.status === "done"
+                ? `Synced (${syncStatus.totalSynced})`
+                : "Sync Creators"}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-1" />
             Export CSV

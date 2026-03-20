@@ -80,6 +80,18 @@ export async function GET() {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS sync_state (
+        id TEXT PRIMARY KEY,
+        cursor TEXT,
+        total_synced INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'idle',
+        started_at TEXT,
+        updated_at TEXT,
+        error TEXT
+      )
+    `;
+
     // Migrations for existing tables
     await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS is_performer BOOLEAN DEFAULT FALSE`;
 

@@ -58,18 +58,6 @@ export function FilterBar({
           <option value="subscribers">Most Subscribers</option>
         </select>
 
-        {/* Source toggle */}
-        <select
-          value={filters.source}
-          onChange={(e) =>
-            onFiltersChange({ ...filters, source: e.target.value })
-          }
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="api">Live API</option>
-          <option value="cache">Local Cache</option>
-        </select>
-
         {/* Save search */}
         {onSaveSearch && (
           <Button variant="outline" size="sm" onClick={onSaveSearch}>

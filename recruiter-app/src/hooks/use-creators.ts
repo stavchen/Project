@@ -5,7 +5,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 export interface SearchFilters {
   query: string;
@@ -14,7 +14,6 @@ export interface SearchFilters {
   isFree: string; // "all" | "true" | "false"
   minSubscribers: string;
   maxSubscribers: string;
-  source: string; // "api" | "cache"
   creatorsOnly: boolean;
   hasProfilePic: boolean;
 }
@@ -26,7 +25,6 @@ export const DEFAULT_FILTERS: SearchFilters = {
   isFree: "all",
   minSubscribers: "",
   maxSubscribers: "",
-  source: "api",
   creatorsOnly: true,
   hasProfilePic: true,
 };
@@ -41,7 +39,6 @@ async function fetchCreators({
   const params = new URLSearchParams({
     limit: "20",
     sort: filters.sort,
-    source: filters.source,
   });
 
   // Unified page token — server handles cursor vs offset internally
@@ -82,21 +79,6 @@ export function useCreators(filters: SearchFilters) {
     staleTime: 60_000,
     retry: 1,
   });
-
-  // Auto-fetch next page when a page returns 0 results but has more
-  // (happens when filters remove all results from an API page)
-  useEffect(() => {
-    const pages = query.data?.pages;
-    if (!pages || pages.length === 0) return;
-    const lastPage = pages[pages.length - 1];
-    if (
-      lastPage.hasMore &&
-      (lastPage.data || []).length === 0 &&
-      !query.isFetchingNextPage
-    ) {
-      query.fetchNextPage();
-    }
-  }, [query.data, query.isFetchingNextPage, query.fetchNextPage]);
 
   // Deduplicate across pages
   const creators = useMemo(() => {

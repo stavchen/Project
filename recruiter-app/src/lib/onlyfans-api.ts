@@ -80,6 +80,7 @@ export function transformProfile(p: APICreatorProfile) {
     isFree: !p.subscribe_price || p.subscribe_price === 0,
     subscriptionPrice: p.subscribe_price || 0,
     isVerified: p.is_verified || false,
+    isPerformer: p.is_performer || p.is_real_performer || false,
     joinedAt: p.join_date || null,
     fetchedAt: new Date().toISOString(),
     rawJson: JSON.stringify(p),

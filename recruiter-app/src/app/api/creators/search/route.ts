@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
     const minSubscribers = params.get("minSubscribers");
     const maxSubscribers = params.get("maxSubscribers");
     const source = params.get("source") || "api";
+    const creatorsOnly = params.get("creatorsOnly") === "true";
+    const hasProfilePic = params.get("hasProfilePic") === "true";
 
     if (source === "api") {
       const result = await searchCreators({
@@ -33,7 +35,16 @@ export async function GET(req: NextRequest) {
               : undefined,
       });
 
-      // Cache results in local DB (upsert)
+      // Filter: creators only (performers) and must have profile pic
+      let filtered = result.profiles;
+      if (creatorsOnly) {
+        filtered = filtered.filter((p) => p.isPerformer);
+      }
+      if (hasProfilePic) {
+        filtered = filtered.filter((p) => !!p.avatarUrl);
+      }
+
+      // Cache results in local DB (upsert) — cache all, even filtered out
       for (const profile of result.profiles) {
         try {
           const [existing] = await db
@@ -58,7 +69,7 @@ export async function GET(req: NextRequest) {
 
       // Enrich with favorite status and tags
       const enriched = await Promise.all(
-        result.profiles.map(async (p) => {
+        filtered.map(async (p) => {
           try {
             const [fav] = await db
               .select()
@@ -113,6 +124,12 @@ export async function GET(req: NextRequest) {
       conditions.push(
         sql`${creators.subscriberCount} <= ${parseInt(maxSubscribers)}`
       );
+    }
+    if (creatorsOnly) {
+      conditions.push(eq(creators.isPerformer, true));
+    }
+    if (hasProfilePic) {
+      conditions.push(sql`${creators.avatarUrl} IS NOT NULL`);
     }
 
     const orderBy =

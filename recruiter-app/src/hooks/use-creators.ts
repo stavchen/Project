@@ -15,6 +15,8 @@ export interface SearchFilters {
   minSubscribers: string;
   maxSubscribers: string;
   source: string; // "api" | "cache"
+  creatorsOnly: boolean;
+  hasProfilePic: boolean;
 }
 
 export const DEFAULT_FILTERS: SearchFilters = {
@@ -25,6 +27,8 @@ export const DEFAULT_FILTERS: SearchFilters = {
   minSubscribers: "",
   maxSubscribers: "",
   source: "api",
+  creatorsOnly: true,
+  hasProfilePic: true,
 };
 
 async function fetchCreators({
@@ -56,6 +60,8 @@ async function fetchCreators({
     params.set("minSubscribers", filters.minSubscribers);
   if (filters.maxSubscribers)
     params.set("maxSubscribers", filters.maxSubscribers);
+  if (filters.creatorsOnly) params.set("creatorsOnly", "true");
+  if (filters.hasProfilePic) params.set("hasProfilePic", "true");
 
   const res = await fetch(`/api/creators/search?${params}`);
   if (!res.ok) {

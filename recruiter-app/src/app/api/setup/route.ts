@@ -25,6 +25,7 @@ export async function GET() {
         is_free BOOLEAN DEFAULT FALSE,
         subscription_price DOUBLE PRECISION,
         is_verified BOOLEAN DEFAULT FALSE,
+        is_performer BOOLEAN DEFAULT FALSE,
         joined_at TEXT,
         fetched_at TEXT NOT NULL,
         raw_json TEXT
@@ -78,6 +79,9 @@ export async function GET() {
         created_at TEXT NOT NULL
       )
     `;
+
+    // Migrations for existing tables
+    await sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS is_performer BOOLEAN DEFAULT FALSE`;
 
     // Indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_creators_joined ON creators(joined_at)`;

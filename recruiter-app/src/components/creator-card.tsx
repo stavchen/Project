@@ -71,31 +71,36 @@ export function CreatorCard({
 
       {!compact && (
         <>
-          {/* Cover */}
-          <div className="h-20 bg-gradient-to-r from-purple-500 to-pink-500 relative">
-            {creator.coverUrl && (
+          {/* Large profile pic - hero element */}
+          <div className="relative aspect-square bg-muted overflow-hidden">
+            {creator.avatarUrl ? (
               <img
-                src={creator.coverUrl}
-                alt=""
+                src={creator.avatarUrl}
+                alt={creator.displayName}
                 className="w-full h-full object-cover"
               />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-4xl font-bold text-muted-foreground bg-gradient-to-br from-purple-100 to-pink-100">
+                {(creator.displayName || creator.username)?.[0]?.toUpperCase()}
+              </div>
             )}
-          </div>
-
-          {/* Avatar */}
-          <div className="px-4 -mt-8 relative z-10">
-            <div className="w-16 h-16 rounded-full border-4 border-card bg-muted overflow-hidden">
-              {creator.avatarUrl ? (
-                <img
-                  src={creator.avatarUrl}
-                  alt={creator.displayName}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xl font-bold text-muted-foreground">
-                  {(creator.displayName || creator.username)?.[0]?.toUpperCase()}
-                </div>
-              )}
+            {/* Verified badge overlay */}
+            {creator.isVerified && (
+              <div className="absolute top-2 right-2">
+                <CheckCircle className="h-5 w-5 text-blue-500 drop-shadow-md" />
+              </div>
+            )}
+            {/* Price tag overlay */}
+            <div className="absolute bottom-2 right-2">
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  creator.isFree
+                    ? "bg-green-500/90 text-white"
+                    : "bg-amber-500/90 text-white"
+                }`}
+              >
+                {creator.isFree ? "FREE" : `$${creator.subscriptionPrice}/mo`}
+              </span>
             </div>
           </div>
         </>
@@ -118,7 +123,7 @@ export function CreatorCard({
       )}
 
       <div className={compact ? "flex-1 min-w-0" : "p-4 pt-2"}>
-        {/* Name + verification */}
+        {/* Name */}
         <div className="flex items-center gap-1.5">
           <button
             onClick={onOpenDetail}
@@ -126,9 +131,6 @@ export function CreatorCard({
           >
             {creator.displayName || creator.username}
           </button>
-          {creator.isVerified && (
-            <CheckCircle className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
-          )}
         </div>
 
         <p className="text-xs text-muted-foreground truncate">
@@ -149,13 +151,6 @@ export function CreatorCard({
           <span className="flex items-center gap-1">
             <Video className="h-3 w-3" />
             {formatCount(creator.videoCount || 0)}
-          </span>
-          <span
-            className={`font-medium ${
-              creator.isFree ? "text-green-600" : "text-amber-600"
-            }`}
-          >
-            {creator.isFree ? "FREE" : `$${creator.subscriptionPrice}/mo`}
           </span>
         </div>
 

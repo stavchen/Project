@@ -28,6 +28,7 @@ export const creators = pgTable("creators", {
   isFree: boolean("is_free").default(false),
   subscriptionPrice: doublePrecision("subscription_price"),
   isVerified: boolean("is_verified").default(false),
+  isPerformer: boolean("is_performer").default(false),
   joinedAt: text("joined_at"),
   fetchedAt: text("fetched_at").notNull(),
   rawJson: text("raw_json"),

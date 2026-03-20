@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Filter, Save, Instagram, Star, X } from "lucide-react";
+import { Search, Filter, Save, Instagram, Star, X, User, ImageIcon } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
@@ -86,6 +86,42 @@ export function FilterBar({
           Filters:
         </span>
 
+        {/* Creators Only */}
+        <button
+          onClick={() =>
+            onFiltersChange({
+              ...filters,
+              creatorsOnly: !filters.creatorsOnly,
+            })
+          }
+          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            filters.creatorsOnly
+              ? "bg-purple-100 text-purple-800 border border-purple-300"
+              : "bg-secondary text-secondary-foreground border border-transparent"
+          }`}
+        >
+          <User className="h-3 w-3" />
+          Creators Only
+        </button>
+
+        {/* Has Profile Pic */}
+        <button
+          onClick={() =>
+            onFiltersChange({
+              ...filters,
+              hasProfilePic: !filters.hasProfilePic,
+            })
+          }
+          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            filters.hasProfilePic
+              ? "bg-blue-100 text-blue-800 border border-blue-300"
+              : "bg-secondary text-secondary-foreground border border-transparent"
+          }`}
+        >
+          <ImageIcon className="h-3 w-3" />
+          Has Profile Pic
+        </button>
+
         {/* Has Instagram */}
         <button
           onClick={() =>
@@ -146,7 +182,9 @@ export function FilterBar({
         {(filters.hasInstagram ||
           filters.isFree !== "all" ||
           filters.minSubscribers ||
-          filters.maxSubscribers) && (
+          filters.maxSubscribers ||
+          !filters.creatorsOnly ||
+          !filters.hasProfilePic) && (
           <button
             onClick={() =>
               onFiltersChange({
@@ -155,6 +193,8 @@ export function FilterBar({
                 isFree: "all",
                 minSubscribers: "",
                 maxSubscribers: "",
+                creatorsOnly: true,
+                hasProfilePic: true,
               })
             }
             className="text-xs text-destructive hover:underline"

@@ -5,7 +5,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 export interface SearchFilters {
   query: string;
@@ -31,12 +31,6 @@ export const DEFAULT_FILTERS: SearchFilters = {
   hasProfilePic: true,
 };
 
-/** Instagram filter forces cache mode on the server, mirror that here */
-function effectiveSource(filters: SearchFilters) {
-  if (filters.hasInstagram) return "cache";
-  return filters.source;
-}
-
 async function fetchCreators({
   pageParam = "",
   filters,
@@ -44,19 +38,15 @@ async function fetchCreators({
   pageParam?: string;
   filters: SearchFilters;
 }) {
-  const source = effectiveSource(filters);
   const params = new URLSearchParams({
     limit: "20",
     sort: filters.sort,
-    source: filters.source, // send original; server will override if needed
+    source: filters.source,
   });
 
+  // Unified page token — server handles cursor vs offset internally
   if (pageParam) {
-    if (source === "api") {
-      params.set("cursor", pageParam);
-    } else {
-      params.set("offset", pageParam);
-    }
+    params.set("page", pageParam);
   }
 
   if (filters.query) params.set("query", filters.query);
@@ -85,15 +75,28 @@ export function useCreators(filters: SearchFilters) {
     queryFn: ({ pageParam }) => fetchCreators({ pageParam, filters }),
     getNextPageParam: (lastPage: any) => {
       if (!lastPage.hasMore) return undefined;
-      if (effectiveSource(filters) === "api") {
-        return lastPage.nextCursor || undefined;
-      }
-      return String(lastPage.nextOffset);
+      // Server returns a unified nextPage token (cursor:X or offset:X)
+      return lastPage.nextPage || undefined;
     },
     initialPageParam: "",
     staleTime: 60_000,
     retry: 1,
   });
+
+  // Auto-fetch next page when a page returns 0 results but has more
+  // (happens when filters remove all results from an API page)
+  useEffect(() => {
+    const pages = query.data?.pages;
+    if (!pages || pages.length === 0) return;
+    const lastPage = pages[pages.length - 1];
+    if (
+      lastPage.hasMore &&
+      (lastPage.data || []).length === 0 &&
+      !query.isFetchingNextPage
+    ) {
+      query.fetchNextPage();
+    }
+  }, [query.data, query.isFetchingNextPage, query.fetchNextPage]);
 
   // Deduplicate across pages
   const creators = useMemo(() => {

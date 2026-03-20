@@ -23,53 +23,86 @@ export async function GET(req: NextRequest) {
     const hasProfilePic = params.get("hasProfilePic") === "true";
 
     if (source === "api") {
-      const result = await searchCreators({
-        query: query || undefined,
-        cursor,
-        limit,
-        sort:
-          sort === "newest"
-            ? "join_date"
-            : sort === "subscribers"
-              ? "favorited_count"
-              : undefined,
-      });
+      const needsFiltering =
+        creatorsOnly || hasProfilePic || hasInstagram || isFree === "true" || isFree === "false";
 
-      // Filter: creators only (performers) and must have profile pic
-      let filtered = result.profiles;
-      if (creatorsOnly) {
-        filtered = filtered.filter((p) => p.isPerformer);
-      }
-      if (hasProfilePic) {
-        filtered = filtered.filter((p) => !!p.avatarUrl);
-      }
+      // Keep fetching pages until we have enough filtered results
+      const collected: any[] = [];
+      let currentCursor = cursor;
+      let lastNextCursor: string | null = null;
+      let totalResults = 0;
+      let credits: any = null;
+      const maxPages = needsFiltering ? 10 : 1; // fetch up to 10 pages when filtering
 
-      // Cache results in local DB (upsert) — cache all, even filtered out
-      for (const profile of result.profiles) {
-        try {
-          const [existing] = await db
-            .select({ id: creators.id })
-            .from(creators)
-            .where(eq(creators.id, profile.id))
-            .limit(1);
+      for (let page = 0; page < maxPages; page++) {
+        const result = await searchCreators({
+          query: query || undefined,
+          cursor: currentCursor,
+          limit: 50, // fetch larger batches when filtering
+          sort:
+            sort === "newest"
+              ? "join_date"
+              : sort === "subscribers"
+                ? "favorited_count"
+                : undefined,
+        });
 
-          if (existing) {
-            await db
-              .update(creators)
-              .set({ ...profile, fetchedAt: new Date().toISOString() })
-              .where(eq(creators.id, profile.id));
-          } else {
-            await db.insert(creators).values(profile);
+        totalResults = result.totalResults;
+        credits = result.credits;
+        lastNextCursor = result.nextCursor;
+
+        // Cache all results in local DB
+        for (const profile of result.profiles) {
+          try {
+            const [existing] = await db
+              .select({ id: creators.id })
+              .from(creators)
+              .where(eq(creators.id, profile.id))
+              .limit(1);
+
+            if (existing) {
+              await db
+                .update(creators)
+                .set({ ...profile, fetchedAt: new Date().toISOString() })
+                .where(eq(creators.id, profile.id));
+            } else {
+              await db.insert(creators).values(profile);
+            }
+          } catch (dbErr) {
+            console.error("DB upsert error:", dbErr);
           }
-        } catch (dbErr) {
-          // Don't fail the whole request if one upsert fails
-          console.error("DB upsert error:", dbErr);
         }
+
+        // Apply all filters
+        let batch = result.profiles;
+        if (creatorsOnly) {
+          batch = batch.filter((p) => p.isPerformer);
+        }
+        if (hasProfilePic) {
+          batch = batch.filter((p) => !!p.avatarUrl);
+        }
+        if (hasInstagram) {
+          batch = batch.filter((p) => p.hasInstagram);
+        }
+        if (isFree === "true") {
+          batch = batch.filter((p) => p.isFree);
+        } else if (isFree === "false") {
+          batch = batch.filter((p) => !p.isFree);
+        }
+
+        collected.push(...batch);
+
+        // Stop if we have enough or no more pages
+        if (collected.length >= limit || !result.nextCursor) break;
+        currentCursor = result.nextCursor;
       }
+
+      // Trim to requested limit
+      const pageResults = collected.slice(0, limit);
 
       // Enrich with favorite status and tags
       const enriched = await Promise.all(
-        filtered.map(async (p) => {
+        pageResults.map(async (p) => {
           try {
             const [fav] = await db
               .select()
@@ -93,10 +126,10 @@ export async function GET(req: NextRequest) {
 
       return NextResponse.json({
         data: enriched,
-        nextCursor: result.nextCursor,
-        hasMore: !!result.nextCursor,
-        totalResults: result.totalResults,
-        credits: result.credits,
+        nextCursor: lastNextCursor,
+        hasMore: !!lastNextCursor,
+        totalResults,
+        credits,
       });
     }
 

@@ -3,17 +3,18 @@ import { db } from "@/lib/db";
 import { outreachLog, creators } from "@/lib/schema";
 import { eq, desc } from "drizzle-orm";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const limit = parseInt(req.nextUrl.searchParams.get("limit") || "50");
 
-    const results = db
+    const results = await db
       .select()
       .from(outreachLog)
       .innerJoin(creators, eq(outreachLog.creatorId, creators.id))
       .orderBy(desc(outreachLog.createdAt))
-      .limit(limit)
-      .all();
+      .limit(limit);
 
     const feed = results.map((r) => ({
       id: r.outreach_log.id,

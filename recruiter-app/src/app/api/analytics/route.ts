@@ -1,72 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { creators, favorites, outreachLog, tags, creatorTags } from "@/lib/schema";
+import {
+  creators,
+  favorites,
+  outreachLog,
+} from "@/lib/schema";
 import { sql, eq, count } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    // Total creators cached
-    const totalCreators = db
+    const [totalCreatorsRow] = await db
       .select({ count: count() })
-      .from(creators)
-      .get()?.count || 0;
+      .from(creators);
+    const totalCreators = totalCreatorsRow?.count || 0;
 
-    // Total favorites
-    const totalFavorites = db
+    const [totalFavoritesRow] = await db
       .select({ count: count() })
-      .from(favorites)
-      .get()?.count || 0;
+      .from(favorites);
+    const totalFavorites = totalFavoritesRow?.count || 0;
 
-    // Pipeline breakdown
-    const pipelineStats = db
+    const pipelineStats = await db
       .select({
         status: favorites.status,
         count: count(),
       })
       .from(favorites)
-      .groupBy(favorites.status)
-      .all();
+      .groupBy(favorites.status);
 
-    // Outreach stats (last 7 days)
     const sevenDaysAgo = new Date(
       Date.now() - 7 * 24 * 60 * 60 * 1000
     ).toISOString();
-    const recentOutreach = db
+    const recentOutreach = await db
       .select({
         action: outreachLog.action,
         count: count(),
       })
       .from(outreachLog)
       .where(sql`${outreachLog.createdAt} >= ${sevenDaysAgo}`)
-      .groupBy(outreachLog.action)
-      .all();
+      .groupBy(outreachLog.action);
 
-    // Creators with Instagram
-    const withInstagram = db
+    const [withInstagramRow] = await db
       .select({ count: count() })
       .from(creators)
-      .where(eq(creators.hasInstagram, true))
-      .get()?.count || 0;
+      .where(eq(creators.hasInstagram, true));
+    const withInstagram = withInstagramRow?.count || 0;
 
-    // Conversion rates
-    const contacted = pipelineStats.find((s) => s.status === "contacted")?.count || 0;
-    const responded = pipelineStats.find((s) => s.status === "responded")?.count || 0;
-    const signed = pipelineStats.find((s) => s.status === "signed")?.count || 0;
+    const pipelineMap = Object.fromEntries(
+      pipelineStats.map((s) => [s.status, s.count])
+    );
+    const contacted = pipelineMap.contacted || 0;
+    const responded = pipelineMap.responded || 0;
+    const signed = pipelineMap.signed || 0;
 
     return NextResponse.json({
       totalCreators,
       totalFavorites,
       withInstagram,
-      pipelineStats: Object.fromEntries(
-        pipelineStats.map((s) => [s.status, s.count])
-      ),
+      pipelineStats: pipelineMap,
       recentOutreach: Object.fromEntries(
         recentOutreach.map((s) => [s.action, s.count])
       ),
       conversionRates: {
-        contactToResponse: contacted > 0 ? (responded / contacted) * 100 : 0,
-        responseToSigned: responded > 0 ? (signed / responded) * 100 : 0,
-        overallConversion: totalFavorites > 0 ? (signed / totalFavorites) * 100 : 0,
+        contactToResponse:
+          contacted > 0 ? (responded / contacted) * 100 : 0,
+        responseToSigned:
+          responded > 0 ? (signed / responded) * 100 : 0,
+        overallConversion:
+          totalFavorites > 0 ? (signed / totalFavorites) * 100 : 0,
       },
     });
   } catch (error: any) {

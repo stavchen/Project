@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { creators, favorites, creatorTags } from "@/lib/schema";
-import { searchCreators, transformProfile } from "@/lib/onlyfans-api";
-import { eq, like, desc, asc, and, sql, inArray } from "drizzle-orm";
+import { searchCreators } from "@/lib/onlyfans-api";
+import { eq, desc, asc, and, sql, ilike } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,52 +17,58 @@ export async function GET(req: NextRequest) {
     const isFree = params.get("isFree");
     const minSubscribers = params.get("minSubscribers");
     const maxSubscribers = params.get("maxSubscribers");
-    const source = params.get("source") || "api"; // api | cache
+    const source = params.get("source") || "api";
 
     if (source === "api") {
-      // Fetch from external API
       const result = await searchCreators({
         query,
         offset,
         limit,
-        sort: sort === "newest" ? "joinDate" : sort === "subscribers" ? "subscribersCount" : undefined,
+        sort:
+          sort === "newest"
+            ? "joinDate"
+            : sort === "subscribers"
+              ? "subscribersCount"
+              : undefined,
       });
 
-      // Cache results in local DB (upsert)
+      // Upsert results into local DB
       for (const profile of result.profiles) {
-        const existing = db
-          .select()
+        const [existing] = await db
+          .select({ id: creators.id })
           .from(creators)
           .where(eq(creators.id, profile.id))
-          .get();
+          .limit(1);
+
         if (existing) {
-          db.update(creators)
+          await db
+            .update(creators)
             .set({ ...profile, fetchedAt: new Date().toISOString() })
-            .where(eq(creators.id, profile.id))
-            .run();
+            .where(eq(creators.id, profile.id));
         } else {
-          db.insert(creators).values(profile).run();
+          await db.insert(creators).values(profile);
         }
       }
 
-      // Enrich with favorite status
-      const enriched = result.profiles.map((p) => {
-        const fav = db
-          .select()
-          .from(favorites)
-          .where(eq(favorites.creatorId, p.id))
-          .get();
-        const ctags = db
-          .select()
-          .from(creatorTags)
-          .where(eq(creatorTags.creatorId, p.id))
-          .all();
-        return {
-          ...p,
-          favorite: fav || null,
-          tagIds: ctags.map((t) => t.tagId),
-        };
-      });
+      // Enrich with favorite status and tags
+      const enriched = await Promise.all(
+        result.profiles.map(async (p) => {
+          const [fav] = await db
+            .select()
+            .from(favorites)
+            .where(eq(favorites.creatorId, p.id))
+            .limit(1);
+          const ctags = await db
+            .select()
+            .from(creatorTags)
+            .where(eq(creatorTags.creatorId, p.id));
+          return {
+            ...p,
+            favorite: fav || null,
+            tagIds: ctags.map((t) => t.tagId),
+          };
+        })
+      );
 
       return NextResponse.json({
         data: enriched,
@@ -73,7 +81,7 @@ export async function GET(req: NextRequest) {
     const conditions = [];
     if (query) {
       conditions.push(
-        sql`(${creators.username} LIKE ${"%" + query + "%"} OR ${creators.displayName} LIKE ${"%" + query + "%"} OR ${creators.bio} LIKE ${"%" + query + "%"} OR ${creators.location} LIKE ${"%" + query + "%"})`
+        sql`(${creators.username} ILIKE ${"%" + query + "%"} OR ${creators.displayName} ILIKE ${"%" + query + "%"} OR ${creators.bio} ILIKE ${"%" + query + "%"} OR ${creators.location} ILIKE ${"%" + query + "%"})`
       );
     }
     if (hasInstagram) {
@@ -104,28 +112,32 @@ export async function GET(req: NextRequest) {
             ? desc(creators.subscriberCount)
             : desc(creators.joinedAt);
 
-    const results = db
+    const results = await db
       .select()
       .from(creators)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(orderBy)
       .limit(limit)
-      .offset(offset)
-      .all();
+      .offset(offset);
 
-    const enriched = results.map((p) => {
-      const fav = db
-        .select()
-        .from(favorites)
-        .where(eq(favorites.creatorId, p.id))
-        .get();
-      const ctags = db
-        .select()
-        .from(creatorTags)
-        .where(eq(creatorTags.creatorId, p.id))
-        .all();
-      return { ...p, favorite: fav || null, tagIds: ctags.map((t) => t.tagId) };
-    });
+    const enriched = await Promise.all(
+      results.map(async (p) => {
+        const [fav] = await db
+          .select()
+          .from(favorites)
+          .where(eq(favorites.creatorId, p.id))
+          .limit(1);
+        const ctags = await db
+          .select()
+          .from(creatorTags)
+          .where(eq(creatorTags.creatorId, p.id));
+        return {
+          ...p,
+          favorite: fav || null,
+          tagIds: ctags.map((t) => t.tagId),
+        };
+      })
+    );
 
     return NextResponse.json({
       data: enriched,

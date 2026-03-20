@@ -1,53 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { creators, favorites, creatorTags, outreachLog, tags } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+import {
+  creators,
+  favorites,
+  creatorTags,
+  outreachLog,
+  tags,
+} from "@/lib/schema";
+import { eq, desc, inArray } from "drizzle-orm";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const creator = db
+    const [creator] = await db
       .select()
       .from(creators)
       .where(eq(creators.id, params.id))
-      .get();
+      .limit(1);
 
     if (!creator) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const fav = db
+    const [fav] = await db
       .select()
       .from(favorites)
       .where(eq(favorites.creatorId, params.id))
-      .get();
+      .limit(1);
 
-    const ctags = db
+    const ctags = await db
       .select()
       .from(creatorTags)
-      .where(eq(creatorTags.creatorId, params.id))
-      .all();
+      .where(eq(creatorTags.creatorId, params.id));
 
-    const tagDetails = ctags.length > 0
-      ? db
-          .select()
-          .from(tags)
-          .where(eq(tags.id, ctags[0].tagId)) // simplified
-          .all()
-      : [];
+    const tagIds = ctags.map((ct) => ct.tagId);
+    const tagDetails =
+      tagIds.length > 0
+        ? await db
+            .select()
+            .from(tags)
+            .where(inArray(tags.id, tagIds))
+        : [];
 
-    const history = db
+    const history = await db
       .select()
       .from(outreachLog)
       .where(eq(outreachLog.creatorId, params.id))
-      .all();
+      .orderBy(desc(outreachLog.createdAt));
 
     return NextResponse.json({
       ...creator,
       favorite: fav || null,
       tags: tagDetails,
+      tagIds,
       outreachHistory: history,
     });
   } catch (error: any) {

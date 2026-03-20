@@ -1,6 +1,15 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import {
+  pgTable,
+  text,
+  integer,
+  real,
+  boolean,
+  serial,
+  timestamp,
+  doublePrecision,
+} from "drizzle-orm/pg-core";
 
-export const creators = sqliteTable("creators", {
+export const creators = pgTable("creators", {
   id: text("id").primaryKey(),
   username: text("username").notNull(),
   displayName: text("display_name"),
@@ -14,46 +23,37 @@ export const creators = sqliteTable("creators", {
   photoCount: integer("photo_count").default(0),
   videoCount: integer("video_count").default(0),
   mediaCount: integer("media_count").default(0),
-  hasInstagram: integer("has_instagram", { mode: "boolean" }).default(false),
+  hasInstagram: boolean("has_instagram").default(false),
   instagramHandle: text("instagram_handle"),
-  isFree: integer("is_free", { mode: "boolean" }).default(false),
-  subscriptionPrice: real("subscription_price"),
-  isVerified: integer("is_verified", { mode: "boolean" }).default(false),
+  isFree: boolean("is_free").default(false),
+  subscriptionPrice: doublePrecision("subscription_price"),
+  isVerified: boolean("is_verified").default(false),
   joinedAt: text("joined_at"),
   fetchedAt: text("fetched_at").notNull(),
   rawJson: text("raw_json"),
 });
 
-export const favorites = sqliteTable("favorites", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const favorites = pgTable("favorites", {
+  id: serial("id").primaryKey(),
   creatorId: text("creator_id")
     .notNull()
     .references(() => creators.id),
-  status: text("status", {
-    enum: [
-      "discovered",
-      "contacted",
-      "responded",
-      "negotiating",
-      "signed",
-      "passed",
-    ],
-  }).default("discovered"),
+  status: text("status").default("discovered"),
   notes: text("notes"),
   addedAt: text("added_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   lastContactedAt: text("last_contacted_at"),
 });
 
-export const tags = sqliteTable("tags", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const tags = pgTable("tags", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   color: text("color").default("#6366f1"),
   createdAt: text("created_at").notNull(),
 });
 
-export const creatorTags = sqliteTable("creator_tags", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const creatorTags = pgTable("creator_tags", {
+  id: serial("id").primaryKey(),
   creatorId: text("creator_id")
     .notNull()
     .references(() => creators.id),
@@ -62,22 +62,20 @@ export const creatorTags = sqliteTable("creator_tags", {
     .references(() => tags.id),
 });
 
-export const outreachLog = sqliteTable("outreach_log", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const outreachLog = pgTable("outreach_log", {
+  id: serial("id").primaryKey(),
   creatorId: text("creator_id")
     .notNull()
     .references(() => creators.id),
-  action: text("action", {
-    enum: ["dm_sent", "email_sent", "ig_messaged", "call", "note", "status_change"],
-  }).notNull(),
+  action: text("action").notNull(),
   details: text("details"),
   createdAt: text("created_at").notNull(),
 });
 
-export const savedSearches = sqliteTable("saved_searches", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const savedSearches = pgTable("saved_searches", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  filters: text("filters").notNull(), // JSON string of filter params
+  filters: text("filters").notNull(),
   createdAt: text("created_at").notNull(),
 });
 

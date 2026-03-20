@@ -18,13 +18,16 @@ export async function GET(req: NextRequest) {
     const isFree = params.get("isFree");
     const minSubscribers = params.get("minSubscribers");
     const maxSubscribers = params.get("maxSubscribers");
-    const source = params.get("source") || "api";
+    const rawSource = params.get("source") || "api";
     const creatorsOnly = params.get("creatorsOnly") === "true";
     const hasProfilePic = params.get("hasProfilePic") === "true";
 
+    // Instagram data isn't available in API search results — force cache mode
+    const source = hasInstagram ? "cache" : rawSource;
+
     if (source === "api") {
       const needsFiltering =
-        creatorsOnly || hasProfilePic || hasInstagram || isFree === "true" || isFree === "false";
+        creatorsOnly || hasProfilePic || isFree === "true" || isFree === "false";
 
       // Keep fetching pages until we have enough filtered results
       const collected: any[] = [];
@@ -80,9 +83,6 @@ export async function GET(req: NextRequest) {
         }
         if (hasProfilePic) {
           batch = batch.filter((p) => !!p.avatarUrl);
-        }
-        if (hasInstagram) {
-          batch = batch.filter((p) => p.hasInstagram);
         }
         if (isFree === "true") {
           batch = batch.filter((p) => p.isFree);

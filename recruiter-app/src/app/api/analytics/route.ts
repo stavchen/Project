@@ -47,6 +47,31 @@ export async function GET() {
       .where(eq(creators.hasInstagram, true));
     const withInstagram = withInstagramRow?.count || 0;
 
+    // Debug: check how many creators have instagram-related data in their fields
+    const [websiteHasIg] = await db
+      .select({ count: count() })
+      .from(creators)
+      .where(sql`${creators.website} ILIKE '%instagram%'`);
+    const [bioHasIg] = await db
+      .select({ count: count() })
+      .from(creators)
+      .where(sql`${creators.bio} ILIKE '%instagram%' OR ${creators.bio} ILIKE '%ig:%' OR ${creators.bio} ILIKE '%ig @%' OR ${creators.bio} ILIKE '%insta:%' OR ${creators.bio} ILIKE '%insta @%'`);
+    const [rawHasIg] = await db
+      .select({ count: count() })
+      .from(creators)
+      .where(sql`${creators.rawJson} LIKE '%"instagram"%'`);
+    const [hasWebsite] = await db
+      .select({ count: count() })
+      .from(creators)
+      .where(sql`${creators.website} IS NOT NULL AND ${creators.website} != ''`);
+
+    // Sample 5 raw websites for debugging
+    const sampleWebsites = await db
+      .select({ id: creators.id, website: creators.website, bio: creators.bio })
+      .from(creators)
+      .where(sql`${creators.website} IS NOT NULL AND ${creators.website} != ''`)
+      .limit(10);
+
     const pipelineMap = Object.fromEntries(
       pipelineStats.map((s) => [s.status, s.count])
     );
@@ -58,6 +83,13 @@ export async function GET() {
       totalCreators,
       totalFavorites,
       withInstagram,
+      debug_instagram: {
+        websiteContainsInstagram: websiteHasIg?.count || 0,
+        bioContainsInstagram: bioHasIg?.count || 0,
+        rawJsonContainsInstagram: rawHasIg?.count || 0,
+        creatorsWithWebsite: hasWebsite?.count || 0,
+        sampleWebsites: sampleWebsites.map(s => ({ id: s.id, website: s.website, bioSnippet: s.bio?.slice(0, 200) })),
+      },
       pipelineStats: pipelineMap,
       recentOutreach: Object.fromEntries(
         recentOutreach.map((s) => [s.action, s.count])

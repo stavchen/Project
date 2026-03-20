@@ -10,7 +10,9 @@ export function extractInstagram(
   website?: string | null,
   bio?: string | null
 ): string | null {
-  // Check website field first
+  const HANDLE_RE = /[a-zA-Z0-9_.]{1,30}/;
+
+  // Check website field first — if the whole URL is an instagram link
   if (website) {
     const urlMatch = website.match(
       /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)/i
@@ -18,22 +20,51 @@ export function extractInstagram(
     if (urlMatch) return urlMatch[1];
   }
 
-  // Check bio text
-  if (bio) {
-    // Match instagram.com/handle patterns
-    const bioUrlMatch = bio.match(
-      /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)/i
-    );
-    if (bioUrlMatch) return bioUrlMatch[1];
+  if (!bio) return null;
 
-    // Match "IG: @handle" or "ig: handle" patterns
-    const igMatch = bio.match(
-      /(?:ig|instagram|insta)\s*[:\-]\s*@?([a-zA-Z0-9_.]+)/i
-    );
-    if (igMatch) return igMatch[1];
-  }
+  // 1. instagram.com/handle URLs in bio
+  const bioUrlMatch = bio.match(
+    /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)/i
+  );
+  if (bioUrlMatch) return bioUrlMatch[1];
+
+  // 2. Keyword + optional separator + @handle patterns
+  //    Matches: "IG: @user", "ig @user", "ig- user", "ig = @user",
+  //    "instagram: @user", "insta @user", "my ig is @user", etc.
+  const keywordMatch = bio.match(
+    /(?:^|[\s,;|(])\s*(?:ig|instagram|insta)\s*(?:[:\-=>\s]|is)\s*@?([a-zA-Z0-9_.]{1,30})/i
+  );
+  if (keywordMatch && !isCommonWord(keywordMatch[1])) return keywordMatch[1];
+
+  // 3. Camera emoji patterns: "📸 @user", "📸: user", "📷 @user"
+  const cameraMatch = bio.match(
+    /[📸📷]\s*[:\-=]?\s*@?([a-zA-Z0-9_.]{1,30})/
+  );
+  if (cameraMatch && !isCommonWord(cameraMatch[1])) return cameraMatch[1];
+
+  // 4. "follow me on ig/insta" or "find me on instagram"
+  const followMatch = bio.match(
+    /(?:follow|find|add|dm|hmu|hit me up)\s+(?:me\s+)?(?:on\s+)?(?:ig|instagram|insta)\s*[:\-=@]?\s*@?([a-zA-Z0-9_.]{1,30})/i
+  );
+  if (followMatch && !isCommonWord(followMatch[1])) return followMatch[1];
+
+  // 5. "@handle" right after "ig"/"insta" with 📩/➡️/👉 separators
+  const arrowMatch = bio.match(
+    /(?:ig|instagram|insta)\s*[📩➡️👉🔗💌]+\s*@?([a-zA-Z0-9_.]{1,30})/i
+  );
+  if (arrowMatch && !isCommonWord(arrowMatch[1])) return arrowMatch[1];
 
   return null;
+}
+
+/** Filter out false-positive matches that are common English words, not handles */
+function isCommonWord(s: string): boolean {
+  const words = new Set([
+    "me", "my", "i", "is", "the", "a", "an", "and", "or", "for", "on",
+    "in", "to", "dm", "link", "bio", "here", "page", "free", "new",
+    "hi", "hey", "not", "no", "yes", "all", "available", "content",
+  ]);
+  return words.has(s.toLowerCase());
 }
 
 /** Format a number with K/M suffixes */

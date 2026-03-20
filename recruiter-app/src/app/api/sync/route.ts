@@ -3,7 +3,8 @@ import { neon } from "@neondatabase/serverless";
 import { db } from "@/lib/db";
 import { creators, syncState } from "@/lib/schema";
 import { searchCreators } from "@/lib/onlyfans-api";
-import { eq } from "drizzle-orm";
+import { extractInstagram } from "@/lib/utils";
+import { eq, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 min max for serverless
@@ -206,6 +207,69 @@ export async function POST(req: NextRequest) {
         .where(eq(syncState.id, SYNC_ID));
     } catch {}
 
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+/** PATCH: Re-evaluate hasInstagram for all existing creators using improved extraction */
+export async function PATCH() {
+  try {
+    const BATCH = 500;
+    let offset = 0;
+    let updated = 0;
+    let total = 0;
+
+    while (true) {
+      const rows = await db
+        .select({
+          id: creators.id,
+          website: creators.website,
+          bio: creators.bio,
+          instagramHandle: creators.instagramHandle,
+          hasInstagram: creators.hasInstagram,
+          rawJson: creators.rawJson,
+        })
+        .from(creators)
+        .limit(BATCH)
+        .offset(offset);
+
+      if (rows.length === 0) break;
+      total += rows.length;
+
+      for (const row of rows) {
+        // Try the API's direct instagram field from rawJson
+        let apiIg: string | null = null;
+        if (row.rawJson) {
+          try {
+            const raw = JSON.parse(row.rawJson);
+            apiIg = raw.instagram || null;
+          } catch {}
+        }
+
+        // Run improved extraction on website + bio
+        const parsed = extractInstagram(row.website, row.bio);
+        const handle = apiIg || parsed || null;
+        const hasIg = !!handle;
+
+        // Only update if the flag or handle changed
+        if (hasIg !== row.hasInstagram || handle !== row.instagramHandle) {
+          await db
+            .update(creators)
+            .set({ hasInstagram: hasIg, instagramHandle: handle })
+            .where(eq(creators.id, row.id));
+          updated++;
+        }
+      }
+
+      offset += BATCH;
+    }
+
+    return NextResponse.json({
+      message: `Backfill complete. Scanned ${total} creators, updated ${updated}.`,
+      total,
+      updated,
+    });
+  } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

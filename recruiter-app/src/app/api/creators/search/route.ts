@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
 
     if (source === "api") {
       const needsFiltering =
-        creatorsOnly || hasProfilePic || isFree === "true" || isFree === "false";
+        creatorsOnly || hasProfilePic || isFree === "true" || isFree === "false" ||
+        minSubscribers || maxSubscribers;
 
       // Keep fetching pages until we have enough filtered results
       const collected: any[] = [];
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
       let lastNextCursor: string | null = null;
       let totalResults = 0;
       let credits: any = null;
-      const maxPages = needsFiltering ? 10 : 1; // fetch up to 10 pages when filtering
+      const maxPages = needsFiltering ? 3 : 1; // fetch up to 3 pages when filtering (conserve API credits)
 
       for (let page = 0; page < maxPages; page++) {
         const result = await searchCreators({
@@ -88,6 +89,14 @@ export async function GET(req: NextRequest) {
           batch = batch.filter((p) => p.isFree);
         } else if (isFree === "false") {
           batch = batch.filter((p) => !p.isFree);
+        }
+        if (minSubscribers) {
+          const min = parseInt(minSubscribers);
+          batch = batch.filter((p) => (p.subscriberCount || 0) >= min);
+        }
+        if (maxSubscribers) {
+          const max = parseInt(maxSubscribers);
+          batch = batch.filter((p) => (p.subscriberCount || 0) <= max);
         }
 
         collected.push(...batch);
